@@ -54,7 +54,7 @@ function ConnexionForm() {
             <path fill="#FBBC05" d="M3.96 10.7A5.4 5.4 0 013.68 9c0-.59.1-1.17.28-1.7V4.97H.96A9 9 0 000 9c0 1.45.35 2.83.96 4.03l3-2.33z"/>
             <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 00.96 4.97l3 2.33C4.67 5.16 6.66 3.58 9 3.58z"/>
           </svg>
-          Continuer avec Google
+          Continuer avec Google 
         </button>
 
         <div className="flex items-center gap-3 mb-5">

@@ -55,6 +55,7 @@ Réponds uniquement avec le texte du post, sans guillemets ni préambule. Propos
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
     },
     body: JSON.stringify({
+      // Modèle gratuit — voir https://openrouter.ai/models?max_price=0 pour la liste à jour
       model: "meta-llama/llama-3.3-70b-instruct:free",
       messages: [
         { role: "system", content: systemPrompt },

@@ -48,18 +48,16 @@ ${examples.length > 0 ? `Exemples de style à imiter (ne pas copier, s'en inspir
 
 Réponds uniquement avec le texte du post, sans guillemets ni préambule. Propose 3 variantes séparées par "---".`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 600,
-      system: systemPrompt,
+      model: "meta-llama/llama-3.3-70b-instruct:free",
       messages: [
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content: topic
@@ -79,12 +77,9 @@ Réponds uniquement avec le texte du post, sans guillemets ni préambule. Propos
   }
 
   const data = await response.json();
-  const rawText = data.content
-    ?.filter((block: { type: string }) => block.type === "text")
-    .map((block: { text: string }) => block.text)
-    .join("\n");
+  const rawText: string = data.choices?.[0]?.message?.content ?? "";
 
-  const variants = (rawText ?? "")
+  const variants = rawText
     .split("---")
     .map((v: string) => v.trim())
     .filter(Boolean);

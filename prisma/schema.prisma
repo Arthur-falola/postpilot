@@ -1,0 +1,228 @@
+// Schéma Prisma — PostPilot
+// Base de données : PostgreSQL (hébergée sur Alwaysdata)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Auth (NextAuth.js / Auth.js) ----------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String? // null si connexion via Google uniquement
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts        Account[] // comptes OAuth (Google, etc. — auth de l'app)
+  socialAccounts  SocialAccount[] // comptes Facebook/Instagram connectés (publication)
+  posts           Post[]
+  aiProfile       AiProfile?
+  subscription    Subscription?
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------- Comptes sociaux connectés (Facebook / Instagram) ----------
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+}
+
+model SocialAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  platform          Platform
+  platformAccountId String // ID de la page/compte côté plateforme
+  displayName       String
+  accessToken       String   @db.Text // token longue durée, à chiffrer en prod
+  tokenExpiresAt    DateTime?
+  connectedAt       DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts Post[]
+  commentDmRules CommentDmRule[]
+
+  @@unique([userId, platform, platformAccountId])
+  @@map("social_accounts")
+}
+
+// ---------- Publications ----------
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+enum PostSource {
+  MANUAL
+  AI_GENERATED
+}
+
+model Post {
+  id              String     @id @default(cuid())
+  userId          String
+  socialAccountId String
+  content         String     @db.Text
+  mediaUrl        String?
+  status          PostStatus @default(DRAFT)
+  source          PostSource @default(MANUAL)
+  scheduledFor    DateTime?
+  publishedAt     DateTime?
+  errorMessage    String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor]) // pour le cron de publication
+  @@map("posts")
+}
+
+// ---------- Profil IA (l'"entraînement" léger) ----------
+
+enum PostTone {
+  PRO
+  AMICAL
+  DIRECT
+  HUMORISTIQUE
+}
+
+enum PostLength {
+  COURT
+  MOYEN
+  LONG
+}
+
+model AiProfile {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  businessContext String     @db.Text // "Décris ton activité en 2-3 phrases"
+  tone            PostTone   @default(AMICAL)
+  defaultLength   PostLength @default(MOYEN)
+  useEmojis       Boolean    @default(true)
+  sampleExamples  Json? // tableau de posts exemples fournis par l'utilisateur
+  updatedAt       DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_profiles")
+}
+
+// ---------- Automatisation : DM sur commentaire ----------
+
+model CommentDmRule {
+  id              String   @id @default(cuid())
+  userId          String
+  socialAccountId String
+  active          Boolean  @default(true)
+  name            String // ex: "Merci pour ton commentaire"
+  keyword         String? // null = déclenche sur TOUT commentaire
+  messageTemplate String   @db.Text // peut contenir {prenom} si dispo
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  logs          CommentDmLog[]
+
+  @@map("comment_dm_rules")
+}
+
+enum DmSendStatus {
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model CommentDmLog {
+  id             String       @id @default(cuid())
+  ruleId         String
+  commentId      String // ID Facebook du commentaire déclencheur
+  commenterId    String // PSID de l'auteur du commentaire
+  status         DmSendStatus
+  errorMessage   String?
+  createdAt      DateTime     @default(now())
+
+  rule CommentDmRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleId, commentId]) // évite les doublons si Facebook renvoie le même event
+  @@map("comment_dm_logs")
+}
+
+// ---------- Abonnement ----------
+
+enum PlanTier {
+  FREE_TRIAL
+  MENSUEL
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model Subscription {
+  id            String              @id @default(cuid())
+  userId        String              @unique
+  plan          PlanTier            @default(FREE_TRIAL)
+  status        SubscriptionStatus  @default(ACTIVE)
+  trialEndsAt   DateTime?
+  currentPeriodEnd DateTime?
+  createdAt     DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
